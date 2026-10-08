@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>공정계산기</title>
+<meta name="theme-color" content="#eef2f0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e1614" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="공정계산기">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+  :root { color-scheme: light dark; }
+  html, body { height: auto; }
+  body { margin: 0; padding-top: calc(28px + env(safe-area-inset-top, 0px)); padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  [hidden] { display: none !important; }
+  button, input { -webkit-tap-highlight-color: transparent; }
+  /* Layout: 한 열짜리 계산 도구. 탭 → 입력 → 큰 결과 → 계산식 순서로 위에서 아래로 읽는다. */
+  :root {
+    --bg: #eef2f0;
+    --surface: #ffffff;
+    --fg: #14211d;
+    --muted: #5a6a64;
+    --line: #d3dcd8;
+    --accent: #0a6b66;
+    --accent-fg: #ffffff;
+    --danger: #b3261e;
+    --font-ui: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+    --font-num: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e1614;
+      --surface: #16211f;
+      --fg: #e4eeea;
+      --muted: #94a69f;
+      --line: #283834;
+      --accent: #4fd1b8;
+      --accent-fg: #07201b;
+      --danger: #ff8a80;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e1614;
+    --surface: #16211f;
+    --fg: #e4eeea;
+    --muted: #94a69f;
+    --line: #283834;
+    --accent: #4fd1b8;
+    --accent-fg: #07201b;
+    --danger: #ff8a80;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-ui);
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  .wrap { max-width: 540px; margin-inline: auto; display: flex; flex-direction: column; gap: 16px; }
+  h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.01em; text-wrap: balance; }
+  .sub { margin: 4px 0 0; color: var(--muted); }
+
+  .tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .tab {
+    min-height: 44px;
+    padding: 8px 6px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--fg);
+    font: inherit;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 600; }
+  .tab:focus-visible, input:focus-visible, .copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 16px; display: flex; flex-direction: column; gap: 14px; }
+  .panel h2 { margin: 0; font-size: 17px; font-weight: 600; text-wrap: balance; }
+  .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+  .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .field > span { font-size: 13px; color: var(--muted); }
+  .inp { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); padding-inline: 12px; min-width: 0; }
+  .inp:focus-within { border-color: var(--accent); }
+  .inp input {
+    flex: 1; min-width: 0; border: 0; background: transparent; color: var(--fg);
+    font-family: var(--font-num); font-size: 18px; font-weight: 500; padding-block: 11px; outline-offset: 6px;
+    font-variant-numeric: tabular-nums;
+  }
+  .inp em { font-style: normal; color: var(--muted); font-family: var(--font-num); }
+  .err { margin: 0; color: var(--danger); font-size: 14px; }
+
+  .result { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 16px; display: flex; flex-direction: column; gap: 6px; }
+  .label { font-size: 12px; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+  .value { font-family: var(--font-num); font-weight: 600; font-size: clamp(34px, 11vw, 52px); line-height: 1.1; color: var(--accent); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+  .sent { margin: 0; min-height: 1.55em; }
+  .copy {
+    align-self: flex-start; margin-top: 6px; min-height: 40px; padding: 6px 14px;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); font: inherit; cursor: pointer;
+  }
+
+  .calc h3 { margin: 0 0 6px; font-size: 13px; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+  .calc pre {
+    margin: 0; padding: 12px 14px; overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+    font-family: var(--font-num); font-size: 14px; line-height: 1.7; color: var(--fg);
+  }
+  .detail { display: flex; flex-direction: column; margin-top: 8px; border-top: 1px solid var(--line); }
+  .detail .row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding-block: 8px; border-bottom: 1px solid var(--line); }
+  .detail .row span:first-child { color: var(--muted); font-size: 13px; }
+  .detail .row span:last-child { font-family: var(--font-num); font-weight: 500; text-align: right; font-variant-numeric: tabular-nums; min-width: 0; overflow-wrap: anywhere; }
+  .note { margin: 0; color: var(--muted); font-size: 13px; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <h1>퍼센트·공정 계산기</h1>
+    <p class="sub">퍼센트, ppm, 공정성능지수(Ppk)를 계산식과 함께 확인합니다.</p>
+  </header>
+
+  <div class="tabs" role="tablist" aria-label="계산 종류" id="tabs"></div>
+
+  <section class="panel">
+    <h2 id="q"></h2>
+    <div class="fields">
+      <label class="field" for="a"><span id="la"></span>
+        <div class="inp"><input id="a" type="text" inputmode="decimal" autocomplete="off"><em id="ua"></em></div>
+      </label>
+      <label class="field" id="fb" for="b"><span id="lb"></span>
+        <div class="inp"><input id="b" type="text" inputmode="decimal" autocomplete="off"><em id="ub"></em></div>
+      </label>
+      <label class="field" id="fc" for="c" hidden><span id="lc"></span>
+        <div class="inp"><input id="c" type="text" inputmode="decimal" autocomplete="off"><em id="uc"></em></div>
+      </label>
+      <label class="field" id="fd" for="d" hidden><span id="ld"></span>
+        <div class="inp"><input id="d" type="text" inputmode="decimal" autocomplete="off"><em id="ud"></em></div>
+      </label>
+    </div>
+    <p class="err" id="err" role="alert" hidden></p>
+  </section>
+
+  <section class="result" aria-live="polite">
+    <div class="label">결과</div>
+    <div class="value" id="val">—</div>
+    <p class="sent" id="sent"></p>
+    <div class="detail" id="detail" hidden></div>
+    <button class="copy" id="copy" type="button">결과 복사</button>
+  </section>
+
+  <section class="calc">
+    <h3>계산식</h3>
+    <pre id="formula"></pre>
+  </section>
+
+  <p class="note">처음 보이는 숫자는 예시입니다. 소수점 아래 4자리까지 반올림해 표시하고, 음수도 입력할 수 있습니다.</p>
+</main>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+
+  function fmt(n) {
+    var r = Math.round(n * 10000) / 10000;
+    if (Object.is(r, -0)) r = 0;
+    return r.toLocaleString("ko-KR", { maximumFractionDigits: 4 });
+  }
+
+  // 상보 오차 함수 (상대 오차 약 1.2e-7, 꼬리 확률 계산에 적합)
+  function erfc(x) {
+    var z = Math.abs(x), t = 1 / (1 + 0.5 * z);
+    var r = t * Math.exp(-z * z - 1.26551223 + t * (1.00002368 + t * (0.37409196 + t * (0.09678418 +
+      t * (-0.18628806 + t * (0.27886807 + t * (-1.13520398 + t * (1.48851587 + t * (-0.82215223 + t * 0.17087277)))))))));
+    return x >= 0 ? r : 2 - r;
+  }
+  function d3(x) { var r = Math.round(x * 1000) / 1000; if (Object.is(r, -0)) r = 0; return r.toFixed(3); }
+  function fin(x) { return x.toLocaleString("ko-KR", { maximumFractionDigits: 8 }); }
+  function fppm(v) { return v < 0.01 ? "0.01 ppm 미만" : v.toLocaleString("ko-KR", { maximumFractionDigits: 2 }) + " ppm"; }
+
+  var modes = [
+    {
+      tab: "값 구하기", q: "A의 B%는 얼마인가", la: "A · 기준 값", lb: "B · 퍼센트", ua: "", ub: "%", ex: ["1200", "15"], unit: "",
+      calc: function (a, b) { return a * b / 100; },
+      gen: "A × B ÷ 100",
+      sub: function (a, b) { return fmt(a) + " × " + fmt(b) + " ÷ 100"; },
+      sent: function (a, b, r) { return fmt(a) + "의 " + fmt(b) + "%는 " + fmt(r) + "입니다."; }
+    },
+    {
+      tab: "비율", q: "A는 B의 몇 %인가", la: "A · 부분 값", lb: "B · 전체 값", ua: "", ub: "", ex: ["30", "120"], unit: "%",
+      guard: function (a, b) { return b === 0 ? "B(전체 값)가 0이면 비율을 계산할 수 없습니다." : ""; },
+      calc: function (a, b) { return a / b * 100; },
+      gen: "A ÷ B × 100",
+      sub: function (a, b) { return fmt(a) + " ÷ " + fmt(b) + " × 100"; },
+      sent: function (a, b, r) { return fmt(a) + "은(는) " + fmt(b) + "의 " + fmt(r) + "%입니다."; }
+    },
+    {
+      tab: "증감률", q: "A에서 B로 몇 % 변했나", la: "A · 이전 값", lb: "B · 이후 값", ua: "", ub: "", ex: ["80", "100"], unit: "%", signed: true,
+      guard: function (a, b) { return a === 0 ? "A(이전 값)가 0이면 증감률을 계산할 수 없습니다." : ""; },
+      calc: function (a, b) { return (b - a) / a * 100; },
+      gen: "(B − A) ÷ A × 100",
+      sub: function (a, b) { return "(" + fmt(b) + " − " + fmt(a) + ") ÷ " + fmt(a) + " × 100"; },
+      sent: function (a, b, r) {
+        var rr = Math.round(r * 10000) / 10000;
+        if (rr === 0) return fmt(a) + "에서 " + fmt(b) + "로 변화가 없습니다.";
+        return fmt(a) + "에서 " + fmt(b) + "로 " + fmt(Math.abs(r)) + "% " + (rr > 0 ? "증가" : "감소") + "했습니다.";
+      }
+    },
+    {
+      tab: "증가", q: "A에 B%를 더하면 얼마인가", la: "A · 기준 값", lb: "B · 증가율", ua: "", ub: "%", ex: ["50000", "10"], unit: "",
+      calc: function (a, b) { return a * (1 + b / 100); },
+      gen: "A × (1 + B ÷ 100)",
+      sub: function (a, b) { return fmt(a) + " × (1 + " + fmt(b) + " ÷ 100)"; },
+      sent: function (a, b, r) { return fmt(a) + "에 " + fmt(b) + "%를 더하면 " + fmt(r) + "입니다."; }
+    },
+    {
+      tab: "감소", q: "A에서 B%를 빼면 얼마인가", la: "A · 기준 값", lb: "B · 감소율", ua: "", ub: "%", ex: ["50000", "20"], unit: "",
+      calc: function (a, b) { return a * (1 - b / 100); },
+      gen: "A × (1 − B ÷ 100)",
+      sub: function (a, b) { return fmt(a) + " × (1 − " + fmt(b) + " ÷ 100)"; },
+      sent: function (a, b, r) { return fmt(a) + "에서 " + fmt(b) + "%를 빼면 " + fmt(r) + "입니다."; }
+    },
+    {
+      tab: "역산", q: "A가 전체의 B%일 때 전체는 얼마인가", la: "A · 부분 값", lb: "B · 퍼센트", ua: "", ub: "%", ex: ["45", "30"], unit: "",
+      guard: function (a, b) { return b === 0 ? "B(퍼센트)가 0이면 전체 값을 계산할 수 없습니다." : ""; },
+      calc: function (a, b) { return a / (b / 100); },
+      gen: "A ÷ (B ÷ 100)",
+      sub: function (a, b) { return fmt(a) + " ÷ (" + fmt(b) + " ÷ 100)"; },
+      sent: function (a, b, r) { return fmt(a) + "이(가) 전체의 " + fmt(b) + "%라면 전체는 " + fmt(r) + "입니다."; }
+    },
+    {
+      tab: "불량 ppm", q: "불량 A개 / 전체 B개는 몇 ppm인가", la: "A · 불량 수", lb: "B · 전체 수", ua: "개", ub: "개", ex: ["12", "24000"], unit: " ppm",
+      guard: function (a, b) {
+        if (b <= 0) return "B(전체 수)는 0보다 커야 합니다.";
+        if (a < 0) return "A(불량 수)는 0 이상이어야 합니다.";
+        if (a > b) return "A(불량 수)가 B(전체 수)보다 클 수 없습니다.";
+        return "";
+      },
+      calc: function (a, b) { return a / b * 1000000; },
+      gen: "A ÷ B × 1,000,000",
+      sub: function (a, b) { return fmt(a) + " ÷ " + fmt(b) + " × 1,000,000"; },
+      sent: function (a, b, r) { return fmt(b) + "개 중 " + fmt(a) + "개 불량은 " + fmt(r) + " ppm(" + fmt(r / 10000) + "%)입니다."; }
+    },
+    {
+      tab: "% → ppm", q: "퍼센트를 ppm으로 바꾸면", la: "A · 퍼센트", ua: "%", single: true, ex: ["0.05", ""], unit: " ppm",
+      calc: function (a) { return a * 10000; },
+      gen: "A × 10,000   (1% = 10,000 ppm)",
+      sub: function (a) { return fmt(a) + " × 10,000"; },
+      sent: function (a, b, r) { return fmt(a) + "%는 " + fmt(r) + " ppm입니다."; }
+    },
+    {
+      tab: "ppm → %", q: "ppm을 퍼센트로 바꾸면", la: "A · ppm", ua: "ppm", single: true, ex: ["500", ""], unit: "%",
+      calc: function (a) { return a / 10000; },
+      gen: "A ÷ 10,000   (10,000 ppm = 1%)",
+      sub: function (a) { return fmt(a) + " ÷ 10,000"; },
+      sent: function (a, b, r) { return fmt(a) + " ppm은 " + fmt(r) + "%입니다."; }
+    },
+    {
+      tab: "Ppk·Ppu·Ppl", q: "공정성능지수 Ppk, Ppu, Ppl, Pp", multi: true,
+      la: "μ · 평균", lb: "σ · 표준편차(전체)", lc: "USL · 규격 상한", ld: "LSL · 규격 하한",
+      ex: ["10.01", "0.04", "10.15", "9.85"],
+      guard: function (n) {
+        if (n[1] <= 0) return "σ(표준편차)는 0보다 커야 합니다.";
+        if (n[2] <= n[3]) return "USL(상한)은 LSL(하한)보다 커야 합니다.";
+        return "";
+      },
+      run: function (n) {
+        var mu = n[0], s = n[1], U = n[2], L = n[3];
+        var ppu = (U - mu) / (3 * s), ppl = (mu - L) / (3 * s), ppk = Math.min(ppu, ppl), pp = (U - L) / (6 * s);
+        var pU = 0.5 * erfc(3 * ppu / Math.SQRT2) * 1e6, pL = 0.5 * erfc(3 * ppl / Math.SQRT2) * 1e6;
+        var grade = ppk >= 1.67 ? "매우 우수 (1.67 이상)" : ppk >= 1.33 ? "양호 (1.33 이상)" : ppk >= 1.0 ? "보통, 관리 강화 필요 (1.00~1.33)" : "부족, 개선 필요 (1.00 미만)";
+        if (mu > U || mu < L) grade += " · 평균이 규격 밖";
+        var side = ppu <= ppl ? "상한(Ppu)" : "하한(Ppl)";
+        var vs = fin(mu), vsg = fin(s), vU = fin(U), vL = fin(L);
+        var f = [
+          "Ppu = (USL − μ) ÷ (3σ)",
+          "    = (" + vU + " − " + vs + ") ÷ (3 × " + vsg + ")",
+          "    = " + d3(ppu),
+          "",
+          "Ppl = (μ − LSL) ÷ (3σ)",
+          "    = (" + vs + " − " + vL + ") ÷ (3 × " + vsg + ")",
+          "    = " + d3(ppl),
+          "",
+          "Ppk = min(Ppu, Ppl) = min(" + d3(ppu) + ", " + d3(ppl) + ") = " + d3(ppk),
+          "",
+          "Pp  = (USL − LSL) ÷ (6σ)",
+          "    = (" + vU + " − " + vL + ") ÷ (6 × " + vsg + ")",
+          "    = " + d3(pp),
+          "",
+          "예상 불량 = Φ(−3·Ppu) + Φ(−3·Ppl)   (정규분포 가정)",
+          "※ Ppk는 전체(장기) σ, Cpk는 군내(단기) σ를 사용합니다."
+        ].join("\n");
+        return {
+          text: d3(ppk),
+          sent: "Ppk " + d3(ppk) + ": " + grade + ". 작은 쪽은 " + side + "입니다.",
+          formula: f,
+          detail: [
+            ["Ppu (상한 쪽)", d3(ppu)],
+            ["Ppl (하한 쪽)", d3(ppl)],
+            ["Pp (산포만, 치우침 무시)", d3(pp)],
+            ["중심 치우침 (Pp − Ppk)", d3(pp - ppk)],
+            ["예상 상한 초과", fppm(pU)],
+            ["예상 하한 미달", fppm(pL)],
+            ["예상 불량 합계", fppm(pU + pL)],
+            ["판정", grade]
+          ]
+        };
+      }
+    }
+  ];
+
+  var cur = 0;
+  var vals = modes.map(function (m) { return m.ex.slice(); });
+  var lastText = "";
+
+  function parse(s) {
+    var t = String(s).replace(/,/g, "").trim();
+    if (t === "") return null;
+    var n = Number(t);
+    return isFinite(n) ? n : NaN;
+  }
+
+  function showErr(msg) {
+    var el = $("err");
+    el.textContent = msg;
+    el.hidden = !msg;
+  }
+
+  function reset(hint) {
+    $("val").textContent = "—";
+    $("sent").textContent = hint || "";
+    $("formula").textContent = "";
+    lastText = "";
+  }
+
+  function updateMulti(m) {
+    var ids = ["a", "b", "c", "d"], raw = [], n = [], i, bad = false, empty = false;
+    for (i = 0; i < 4; i++) {
+      raw.push($(ids[i]).value);
+      var p = parse(raw[i]);
+      if (p === null) empty = true; else if (isNaN(p)) bad = true;
+      n.push(p);
+    }
+    vals[cur] = raw;
+    showErr("");
+    $("detail").hidden = true;
+    if (bad) { showErr("숫자만 입력할 수 있습니다. 예: 10.01, 0.04, -2"); reset(""); return; }
+    if (empty) { reset("네 칸을 모두 입력하세요."); return; }
+    var g = m.guard(n);
+    if (g) { showErr(g); reset(""); return; }
+    var o = m.run(n);
+    $("val").textContent = o.text;
+    $("sent").textContent = o.sent;
+    $("formula").textContent = o.formula;
+    var box = $("detail");
+    box.textContent = "";
+    o.detail.forEach(function (row) {
+      var el = document.createElement("div");
+      el.className = "row";
+      var k = document.createElement("span"); k.textContent = row[0];
+      var v = document.createElement("span"); v.textContent = row[1];
+      el.appendChild(k); el.appendChild(v);
+      box.appendChild(el);
+    });
+    box.hidden = false;
+    lastText = o.text;
+  }
+
+  function update() {
+    var m = modes[cur];
+    if (m.multi) { updateMulti(m); return; }
+    $("detail").hidden = true;
+    vals[cur] = [$("a").value, $("b").value];
+    var a = parse($("a").value), b = m.single ? 0 : parse($("b").value);
+    showErr("");
+    if (a === null || b === null) { reset(m.single ? "숫자를 입력하세요." : "숫자 두 개를 모두 입력하세요."); return; }
+    if (isNaN(a) || isNaN(b)) { showErr("숫자만 입력할 수 있습니다. 예: 1200, 3.5, -20"); reset(""); return; }
+    var g = m.guard ? m.guard(a, b) : "";
+    if (g) { showErr(g); reset(""); return; }
+    var r = m.calc(a, b);
+    if (!isFinite(r)) { showErr("계산 결과가 너무 큽니다."); reset(""); return; }
+    var rr = Math.round(r * 10000) / 10000;
+    var text = (m.signed && rr > 0 ? "+" : "") + fmt(r) + m.unit;
+    $("val").textContent = text;
+    $("sent").textContent = m.sent(a, b, r);
+    $("formula").textContent = m.gen + (m.unit === "%" ? "  (단위 %)" : "") + "\n= " + m.sub(a, b) + "\n= " + text;
+    lastText = text;
+  }
+
+  function select(i) {
+    cur = i;
+    var m = modes[i];
+    var btns = $("tabs").children;
+    for (var k = 0; k < btns.length; k++) {
+      btns[k].setAttribute("aria-selected", k === i ? "true" : "false");
+      btns[k].tabIndex = k === i ? 0 : -1;
+    }
+    $("q").textContent = m.q;
+    $("la").textContent = m.la;
+    $("lb").textContent = m.lb || "";
+    $("ua").textContent = m.ua || "";
+    $("ub").textContent = m.ub || "";
+    $("fb").hidden = !!m.single;
+    $("fc").hidden = !m.multi;
+    $("fd").hidden = !m.multi;
+    $("lc").textContent = m.lc || "";
+    $("ld").textContent = m.ld || "";
+    $("uc").textContent = m.uc || "";
+    $("ud").textContent = m.ud || "";
+    $("a").value = vals[i][0];
+    $("b").value = vals[i][1];
+    $("c").value = vals[i][2] || "";
+    $("d").value = vals[i][3] || "";
+    update();
+  }
+
+  modes.forEach(function (m, i) {
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "tab";
+    btn.setAttribute("role", "tab");
+    btn.textContent = m.tab;
+    btn.addEventListener("click", function () { select(i); });
+    btn.addEventListener("keydown", function (e) {
+      var n = modes.length, t = -1;
+      if (e.key === "ArrowRight") t = (cur + 1) % n;
+      else if (e.key === "ArrowLeft") t = (cur + n - 1) % n;
+      if (t >= 0) { e.preventDefault(); select(t); $("tabs").children[t].focus(); }
+    });
+    $("tabs").appendChild(btn);
+  });
+
+  $("a").addEventListener("input", update);
+  $("b").addEventListener("input", update);
+  $("c").addEventListener("input", update);
+  $("d").addEventListener("input", update);
+
+  $("copy").addEventListener("click", function () {
+    var btn = $("copy");
+    if (!lastText) return;
+    var done = function (msg) {
+      btn.textContent = msg;
+      setTimeout(function () { btn.textContent = "결과 복사"; }, 1400);
+    };
+    try {
+      navigator.clipboard.writeText(lastText).then(function () { done("복사됨"); }, function () { done("복사 실패, 직접 선택하세요"); });
+    } catch (e) { done("복사 실패, 직접 선택하세요"); }
+  });
+
+  select(0);
+})();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("sw.js").catch(function () {});
+  });
+}
+</script>
+</body>
+</html>
